@@ -1,5 +1,5 @@
 !
-!	g_radm_2019.f90
+!	g_radm_2014n.f90
 !	
 !
 !  Creado por Jose Agustin Garcia Reynoso el 19/11/2017.
@@ -9,7 +9,7 @@
 !            Guarda los datos del inventario para el
 !            mecanismo RADM2 en formato netcdf y con NAMELIST
 !
-! ifort -O2 -axAVX -lnetcdff -L$NETCDF/lib -I$NETCDF/include g_radm_2019.f90 -o radm2.exe
+! ifort -O2 -axAVX -lnetcdff -L$NETCDF/lib -I$NETCDF/include g_radm_2014nh.f90 -o radm2nh.exe
 !
 !
 !   Actualizacion de xlat, xlon             26/08/2012
@@ -22,9 +22,8 @@
 !   Se incluye NAMELIST                     08/11/2017
 !   Se lee CDIM y titulo de localiza.csv    19/11/2017
 !   Se calcula el dia juliano                3/08/2018
-!   Para anio 2016                          23/10/2018
-!   Actualizacion CH4 y BC                  16/04/2020
-!   Para anio 2019                          16/04/2020
+!   Cambio en scalp solo capa 1             04/08/2018
+!   Para imprimir emissiones de 1 hr        17/08/2018
 !
 module vars
     integer :: nf    ! number of files antropogenic
@@ -185,7 +184,7 @@ subroutine lee
   CDIM=(utmx(2)-utmx(1))/1000.  ! from meters to km
   print *,CDIM,trim(titulo)
   close(10)
-   deallocate(utmx,utmy,utmz,lon,lat,pop)
+  deallocate(utmx,utmy,utmz,lon,lat,pop)
   do ii=1,nf
   !write(6,*)' >>>> Reading emissions file -',fnameA(i),fnameM(i)
     open(11,file=fnameA(ii),status='OLD',action='READ')
@@ -198,7 +197,7 @@ subroutine lee
     end if
     if(ii.ge.ipm-1) then; is=ipm ;else ;is=ii;end if
     if(ii.eq.imt) is=jmt   ! suma todo el Metano
-    write(6,'(i4,x,A,A,I3,I3)') ii,fnameA(ii),current_date
+    write(6,'(i4,x,A,A,I3,I3)') ii,fnameA(ii),current_date,is
     do
       if(ii.eq.ipm) then
         read(11,*,END=100) idcf,rdum,(edum(ih),ih=1,nh)
@@ -277,16 +276,16 @@ subroutine lee
                 if(ih.gt.9 .and. ih.lt.19) then
                   if(levl.lt.2) then
                     eft(i,j,ii,ih,levl)=eft(i,j,ii,ih,levl)+edum(ih)/WTM(is)*scalp(ii)
-                   else
+                  else
                     eft(i,j,ii,ih,levl)=eft(i,j,ii,ih,levl)+edum(ih)/WTM(is)
                   end if
-                 else
+                else
                   if(levld.lt.2) then
                     eft(i,j,ii,ih,levld)=eft(i,j,ii,ih,levld)+edum(ih)/WTM(is)*scalp(ii)
                   else
                     eft(i,j,ii,ih,levld)=eft(i,j,ii,ih,levld)+edum(ih)/WTM(is)
                   end if
-                 end if
+                end if
 			  end do
           zlev =max(zlev,levl,levld)
           if(zlev.gt.8) Stop "*** Change dimension line  allocate(eft.."
@@ -344,21 +343,15 @@ subroutine store
     call date_and_time(date,time)
      hoy=date(7:8)//'-'//mes(date(5:6))//'-'//date(1:4)//' '//time(1:2)//':'//time(3:4)//':'//time(5:10)
     print *,hoy
-    write(current_date(1:4),'(I4)') 2019 !para 2019
+    write(current_date(1:4),'(I4)') 2014
     JULDAY=juliano(current_date(1:4),current_date(6:7),current_date(9:10))
-     do periodo=1,1!1
-	  if(periodo.eq.1) then
-        FILE_NAME='wrfchemi.d01.'//trim(mecha)//'.'//current_date(1:19)         !******
-	   iit= 0
-	   eit= 23 !11
-	   iTime=current_date
-	  else if(periodo.eq.2) then
-	   iit=12
-	   eit=23
-       write(iTime(12:13),'(I2)') iit
-        FILE_NAME='wrfchemi.d01.'//trim(mecha)//'.'//iTime
-	 end if
-	  ! Open NETCDF emissions file	
+     do periodo=0,23
+      iit= periodo
+      eit= periodo
+      iTime=current_date
+      write(iTime(12:13),'(I2.2)') iit
+      FILE_NAME='wrfchemi.d01.'//trim(mecha)//'.'//iTime
+	  ! Open NETCDF emissions file
        call check( nf90_create(FILE_NAME, nf90_clobber, ncid) )
 !     Define dimensiones
 		  dim(1)=1
@@ -376,7 +369,7 @@ subroutine store
       dimids2 = (/id_dim(2),id_dim(1)/)
       dimids3 = (/id_dim(3),id_dim(2),id_dim(1) /)
       dimids4 = (/id_dim(3),id_dim(4),id_dim(6),id_dim(1)/)
-      print *,"Attributos Globales NF90_GLOBAL"
+     ! print *,"Attributos Globales NF90_GLOBAL"
       !Attributos Globales NF90_GLOBAL
       call check( nf90_put_att(ncid, NF90_GLOBAL, "TITLE",titulo))
       call check( nf90_put_att(ncid, NF90_GLOBAL, "START_DATE",iTime))
@@ -391,8 +384,8 @@ subroutine store
       call check( nf90_put_att(ncid, NF90_GLOBAL, "CEN_LON",xlon(nx/2,ny/2)))
       call check( nf90_put_att(ncid, NF90_GLOBAL, "TRUELAT1",17.5))
       call check( nf90_put_att(ncid, NF90_GLOBAL, "TRUELAT2",29.5))
-      call check( nf90_put_att(ncid, NF90_GLOBAL, "MOAD_CEN_LAT",24.020222))
-      call check( nf90_put_att(ncid, NF90_GLOBAL, "STAND_LON",-102.036352))
+      call check( nf90_put_att(ncid, NF90_GLOBAL, "MOAD_CEN_LAT",xlat(nx/2,ny/2)))
+      call check( nf90_put_att(ncid, NF90_GLOBAL, "STAND_LON",xlon(nx/2,ny/2)))
       call check( nf90_put_att(ncid, NF90_GLOBAL, "POLE_LAT",90.))
       call check( nf90_put_att(ncid, NF90_GLOBAL, "POLE_LON",0.))
       call check( nf90_put_att(ncid, NF90_GLOBAL, "GRIDTYPE","C"))
@@ -404,7 +397,7 @@ subroutine store
       call check( nf90_put_att(ncid, NF90_GLOBAL, "MECHANISM",mecha))
       call check( nf90_put_att(ncid, NF90_GLOBAL, "CREATION_DATE",hoy))
 
-	print *,"Define las variables"
+	!print *,"Define las variables"
 !  Define las variables
 	call check( nf90_def_var(ncid, "Times", NF90_CHAR, dimids2,id_var(radm+1) ) )
 !  Attributos para cada variable 
@@ -467,23 +460,16 @@ subroutine store
 !
 !    Inicia loop de tiempo
 tiempo: do it=iit,eit
-		write(6,'(A,x,I3)')'TIEMPO: ', it
+       write(6,'(A,x,I3,x,A19)')'TIEMPO: ', it,current_date
         gases: do ikk=1,ipm-2!for gases
 			ea=0.0
 		if(ikk.eq.1) then
-         write(current_date(12:13),'(I2.2)')it
+		      write(current_date(12:13),'(I2.2)')it
   	      Times(1,1)=current_date(1:19)
-			  if (periodo.eq. 1) then
-              call check( nf90_put_var(ncid,id_var(radm+1),Times,start=(/1,it+1/)) )
-              call check( nf90_put_var(ncid, id_varlong,xlon,start=(/1,1,it+1/)) )
-              call check( nf90_put_var(ncid, id_varlat,xlat,start=(/1,1,it+1/)) )
-              call check( nf90_put_var(ncid, id_varpop,pob,  start=(/1,1,it+1/)) )
-			  else
-              call check( nf90_put_var(ncid,id_var(radm+1),Times,start=(/1,it-11/)) )
-              call check( nf90_put_var(ncid, id_varlong,xlon,start=(/1,1,it-11/)) )
-              call check( nf90_put_var(ncid, id_varlat,xlat,start=(/1,1,it-11/)) )
-              call check( nf90_put_var(ncid, id_varpop,pob,start=(/1,1,it-11/)) )
-			  endif
+              call check( nf90_put_var(ncid,id_var(radm+1),Times,start=(/1,1/)) )
+              call check( nf90_put_var(ncid, id_varlong,xlon,start=(/1,1,1/)) )
+              call check( nf90_put_var(ncid, id_varlat,xlat,start=(/1,1,1/)) )
+              call check( nf90_put_var(ncid, id_varpop,pob,  start=(/1,1,1/)) )
             end if   ! for kk == 1
           if(ikk.ne.jmt) then
           do i=1, nx
@@ -493,24 +479,20 @@ tiempo: do it=iit,eit
               end do
             end do
           end do
-          else
-          do i=1, nx
-            do j=1, ny
-              do l=1,zlev
-                ea(i,j,l,1)=(eft(i,j,ikk,it+1,l)+eft(i,j,imt,it+1,l)) /(CDIM*CDIM)
-              end do
+        else
+        do i=1, nx
+          do j=1, ny
+            do l=1,zlev
+              ea(i,j,l,1)=(eft(i,j,ikk,it+1,l)+eft(i,j,imt,it+1,l)) /(CDIM*CDIM)
+            end do
             end do
           end do
-          end if
-            if(periodo.eq.1) then
-                call check( nf90_put_var(ncid, id_var(isp(ikk)),ea,start=(/1,1,1,it+1/)) )
-            else
-                call check( nf90_put_var(ncid, id_var(isp(ikk)),ea,start=(/1,1,1,it-11/)) )!******
-            endif
+        end if
+        call check( nf90_put_var(ncid, id_var(isp(ikk)),ea,start=(/1,1,1,1/)) )
 		 end do gases
         aerosol: do ikk=ipm-1,ns ! from PM10
 			ea=0.0
-      if(ikk.ne.jcn)then
+        if(ikk.ne.jcn)then
         do i=1, nx
           do j=1, ny
             do l=1,zlev
@@ -518,7 +500,7 @@ tiempo: do it=iit,eit
             end do
           end do
         end do
-        else
+      else
         do i=1, nx
           do j=1, ny
             do l=1,zlev
@@ -526,15 +508,10 @@ tiempo: do it=iit,eit
             end do
           end do
         end do
-        end if
+      end if
 !
-        if(periodo.eq.1) then
-          call check( nf90_put_var(ncid, id_var(isp(ikk)),ea*0.8,start=(/1,1,1,it+1/)) )
-          call check( nf90_put_var(ncid, id_var(isp(ikk+5)),ea*0.2,start=(/1,1,1,it+1/)) )
-        else
-          call check( nf90_put_var(ncid, id_var(isp(ikk)),ea*0.8,start=(/1,1,1,it-11/)) )        !******
-          call check( nf90_put_var(ncid, id_var(isp(ikk+5)),ea*0.2,start=(/1,1,1,it-11/)) )        !******
-        endif
+          call check( nf90_put_var(ncid, id_var(isp(ikk)),ea*0.8,start=(/1,1,1,1/)) )
+          call check( nf90_put_var(ncid, id_var(isp(ikk+5)),ea*0.2,start=(/1,1,1,1/)) )
 		 end do aerosol
 		end do tiempo
         call check( nf90_close(ncid) )
@@ -626,6 +603,13 @@ end subroutine check
              end select
           return
           end function
+!
+!    _       _ _                   
+!   (_)_   _| (_) __ _ _ __   ___  
+!   | | | | | | |/ _` | '_ \ / _ \ 
+!   | | |_| | | | (_| | | | | (_) |
+!  _/ |\__,_|_|_|\__,_|_| |_|\___/ 
+! |__/                             
 !
 integer function juliano(year,mes,day)
   character*4,intent(in) :: year
